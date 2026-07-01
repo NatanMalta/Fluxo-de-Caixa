@@ -1,0 +1,53 @@
+# =============================================================================
+# Fluxo de Caixa do Mercadinho — gitignore
+# =============================================================================
+
+# --- Legacy PDV (read-only reference; tracked in its own repo) ---
+Ponto-de-Venda/
+
+# --- Backend (.NET / EF Core / SQLite) ---
+backend/**/bin/
+backend/**/obj/
+backend/**/out/
+backend/**/*.db
+backend/**/*.db-shm
+backend/**/*.db-wal
+*.user
+
+# --- Frontend (Flutter / Dart) ---
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.idea/
+frontend/.vscode/
+frontend/.metadata
+frontend/build/
+frontend/android/.gradle/
+frontend/android/app/build/
+frontend/android/build/
+frontend/android/local.properties
+frontend/android/key.properties
+frontend/android/**/GeneratedPluginRegistrant.*
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/ios/Flutter/Generated.xcconfig
+frontend/ios/Runner/GeneratedPluginRegistrant.*
+frontend/web/.dart_tool/
+frontend/web/build/
+frontend/web/flutter_service_worker.js
+frontend/web/index.html
+frontend/macos/Pods/
+frontend/macos/Flutter/GeneratedPluginRegistrant.*
+frontend/macos/Runner/GeneratedPluginRegistrant.*
+frontend/linux/flutter/ephemeral/
+frontend/linux/flutter/generated_plugin_registrant.cc
+frontend/linux/flutter/generated_plugin_registrant.h
+frontend/windows/flutter/ephemeral/
+frontend/windows/flutter/generated_plugin_registrant.cc
+frontend/windows/flutter/generated_plugin_registrant.h
+
+# --- Misc ---
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
