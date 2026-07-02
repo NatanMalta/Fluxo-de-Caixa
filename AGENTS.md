@@ -47,6 +47,7 @@
 
 - **Flutter stable**, Material 3, `intl` for BRL currency formatting
 - **State management**: `setState` for v1 (no Provider/Riverpod yet). Add a state lib if screens start prop-drilling heavily.
+- **Cross-tab coordination**: `HomeScreen` holds `GlobalKey<DashboardScreenState>` and `GlobalKey<LancarScreenState>` to call public methods on the children (`editar`, `atualizar`). Children stay mounted via `IndexedStack`. See ADR 0004.
 - **API base URL**: hardcoded in `lib/services/api_client.dart`. Three common values:
   - Web on the same PC: `http://localhost:5000`
   - Android emulator: `http://10.0.2.2:5000`

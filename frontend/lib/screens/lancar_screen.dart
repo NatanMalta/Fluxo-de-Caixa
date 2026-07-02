@@ -19,10 +19,10 @@ class LancarScreen extends StatefulWidget {
   const LancarScreen({super.key});
 
   @override
-  State<LancarScreen> createState() => _LancarScreenState();
+  State<LancarScreen> createState() => LancarScreenState();
 }
 
-class _LancarScreenState extends State<LancarScreen> {
+class LancarScreenState extends State<LancarScreen> {
   // -- Estado de carregamento de dados auxiliares (contas e categorias) --
   late Future<_LancarDados> _futureDados;
 
@@ -37,6 +37,7 @@ class _LancarScreenState extends State<LancarScreen> {
 
   final _valorCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
+  final _formKey = GlobalKey();
 
   // -- Estado de edição --
   Lancamento? _editando;
@@ -107,6 +108,26 @@ class _LancarScreenState extends State<LancarScreen> {
       _categoriaId = l.categoriaId;
       _contaOrigemId = l.contaOrigemId;
       _contaDestinoId = l.contaDestinoId;
+    });
+  }
+
+  /// Preenche o formulário com [l] para edição e rola o card do formulário
+  /// para que fique visível. Chamado pelo `HomeScreen` quando o usuário toca
+  /// em um Lançamento no widget "Últimos lançamentos" do Dashboard
+  /// (ver ADR 0004).
+  void editar(Lancamento l) {
+    _prefillFromLancamento(l);
+    final ctx = _formKey.currentContext;
+    if (ctx == null) return;
+    // Garante que o setState de _prefillFromLancamento já rebuildou
+    // antes de tentarmos rolar até o card.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -314,6 +335,7 @@ class _LancarScreenState extends State<LancarScreen> {
 
   Widget _buildForm(_LancarDados dados) {
     return Card(
+      key: _formKey,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
