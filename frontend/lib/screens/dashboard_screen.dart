@@ -21,7 +21,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _atualizar() async {
-    setState(() => _future = ApiClient.listarContas());
+    setState(() {
+      _future = ApiClient.listarContas();
+    });
   }
 
   @override

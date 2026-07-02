@@ -357,10 +357,12 @@ class _LancarScreenState extends State<LancarScreen> {
                 ),
               ],
               selected: _tipo == null ? <String>{} : {_tipo!},
+              emptySelectionAllowed: true,
               onSelectionChanged: _editando != null
                   ? null
                   : (sel) {
-                      final novo = sel.firstOrNull;
+                      if (sel.isEmpty) return;
+                      final novo = sel.first;
                       if (novo == _tipo) return;
                       setState(() {
                         _tipo = novo;
@@ -550,6 +552,7 @@ class _SentidoToggle extends StatelessWidget {
         ),
       ],
       selected: sentido == null ? <String>{} : {sentido!},
+      emptySelectionAllowed: true,
       onSelectionChanged: (sel) {
         if (sel.isNotEmpty) onChanged(sel.first);
       },

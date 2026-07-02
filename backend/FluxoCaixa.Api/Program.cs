@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluxoCaixa.Api.Data;
 using FluxoCaixa.Api.Services;
 using Microsoft.EntityFrameworkCore;
@@ -5,7 +7,16 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 // Services
-builder.Services.AddControllers();
+// Enums serializados como strings (camelCase) tanto na entrada quanto na saída.
+// A leitura é case-insensitive, então o cliente pode mandar "banco"/"Banco"/"BANCO"
+// e todos viram TipoConta.Banco. Os valores canônicos (minúsculos) são os mesmos
+// usados no schema SQLite, no CONTEXT.md e no Flutter.
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: true));
+    });
 builder.Services.AddOpenApi();
 
 // EF Core + SQLite
