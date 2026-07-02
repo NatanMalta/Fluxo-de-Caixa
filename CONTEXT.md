@@ -37,6 +37,10 @@ _Avoid_: "tipo de receita/despesa" (linguagem contábil), "tag" (linguagem de ba
 Valor em dinheiro de uma Conta em um instante no tempo. Calculado em tempo de leitura como `saldo_inicial + soma(entradas) − soma(saídas) + soma(ajustes positivos) − soma(ajustes negativos) − soma(transferências saindo) + soma(transferências entrando)`. O `saldo_inicial` é fixado no cadastro da Conta e representa "quanto tinha nessa conta no dia em que comecei a usar o app". Saldos por dia, mês e ano são derivados — não há coluna `saldo` em lugar nenhum do banco.
 _Avoid_: "saldo atual" (data-dependente, melhor dizer "saldo em DD/MM"), "saldo contábil" (linguagem formal), "balanço" (conceito diferente — ver adiante).
 
+**Saldo total**:
+Soma dos saldos correntes de todas as Contas ativas do dono. Representa "quanto de dinheiro o dono tem agora no total", somando caixa físico, contas bancárias, contas digitais e qualquer outro lugar onde o mercadinho guarda dinheiro. É derivado, calculado em tempo de leitura a partir de `saldoAtual` de cada Conta ativa. Diferente de `Resultado` (Entradas − Saídas de um período) e de `Balanço` (tela de período). Aparece em destaque na tela de início.
+_Avoid_: "patrimônio" (linguagem contábil formal, fora do escopo), "saldo consolidado" (soa como relatório), "saldo geral" (ambíguo).
+
 **Balanço**:
 Tela de visualização que resume o estado financeiro em um período. Tem seletor de período (dia / mês / ano) e mostra: total de Entradas no período, total de Saídas, Resultado (Entradas − Saídas, sem contar Transferências), Saldo de cada Conta no fim do período, e detalhamento por Categoria (quais Categorias de Entrada trouxeram mais, quais Categorias de Saída pesaram mais). Filtros por Conta e por Categoria ficam disponíveis.
 _Avoid_: "DRE" (linguagem contábil formal, fora do escopo), "fluxo de caixa" (sinônimo do app inteiro, não de uma tela), "relatório" (genérico demais).
