@@ -3,8 +3,11 @@ using System.Text.Json.Serialization;
 using FluxoCaixa.Api.Data;
 using FluxoCaixa.Api.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseWindowsService();
 
 // Services
 // Enums serializados como strings (camelCase) tanto na entrada quanto na saída.
