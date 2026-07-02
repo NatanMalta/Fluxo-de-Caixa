@@ -36,6 +36,9 @@ migrate_working_dir/
 # Symbolication related
 app.*.symbols
 
+# Local config (override defaults with this file; do not commit)
+assets/config.json
+
 # Obfuscation related
 app.*.map.json
 

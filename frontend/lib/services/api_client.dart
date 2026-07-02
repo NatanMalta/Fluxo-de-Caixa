@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 
 import '../models/conta.dart';
@@ -17,12 +18,46 @@ class ApiException implements Exception {
 
 /// Cliente HTTP para o backend ASP.NET.
 ///
-/// O endereço base pode ser configurado em tempo de execução.
-/// Padrão: http://localhost:5000 (mesma máquina, web).
-/// Para Android no emulador: http://10.0.2.2:5000
-/// Para Android via Wi-Fi:  http://<IP-do-PC>:5000
+/// O endereço base é carregado de `assets/config.json` (chave `apiBaseUrl`)
+/// durante o [init] no startup. O arquivo real é ignorado pelo git —
+/// copie `assets/config.example.json` para `assets/config.json` e edite
+/// com o IP do servidor na LAN. Em runtime, o setter `baseUrl`
+/// (ver `ApiBaseUrlSetting` no main.dart) sobrescreve o config.
 class ApiClient {
-  static String baseUrl = 'http://localhost:5000';
+  /// URL usada quando nem o config nem o override estão definidos.
+  /// Útil para testes locais sem `config.json`.
+  static const String _defaultBaseUrl = 'http://localhost:5000';
+
+  /// Carregado de `assets/config.json` pelo [init].
+  static String? _loadedBaseUrl;
+
+  /// Sobrescrito em runtime via `ApiClient.baseUrl = ...`.
+  static String? _overrideBaseUrl;
+
+  /// URL efetiva: override em runtime > config.json > default.
+  static String get baseUrl =>
+      _overrideBaseUrl ?? _loadedBaseUrl ?? _defaultBaseUrl;
+
+  /// Permite trocar a URL em runtime (ex.: tela de configurações futura).
+  /// Passe `null` para voltar a usar config.json.
+  static set baseUrl(String? url) => _overrideBaseUrl = url;
+
+  /// Carrega `assets/config.json`. Deve ser chamado uma vez no startup,
+  /// antes de qualquer chamada HTTP (tipicamente no `main()`).
+  /// Falha silenciosa: se o arquivo não existir ou estiver inválido,
+  /// o app segue com [_defaultBaseUrl].
+  static Future<void> init() async {
+    try {
+      final raw = await rootBundle.loadString('assets/config.json');
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      final url = json['apiBaseUrl'];
+      if (url is String && url.isNotEmpty) {
+        _loadedBaseUrl = url;
+      }
+    } catch (_) {
+      // Mantém _loadedBaseUrl = null; cai no _defaultBaseUrl.
+    }
+  }
 
   static final _client = http.Client();
 

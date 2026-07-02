@@ -4,11 +4,11 @@ import 'package:intl/intl.dart';
 import 'screens/home_screen.dart';
 import 'services/api_client.dart';
 
-void main() {
-  // No Android emulador, o host é acessado por 10.0.2.2.
-  // No Android device físico via Wi-Fi, configure para o IP do PC.
-  // No Web rodando no mesmo PC, localhost:5000 funciona.
-  // O usuário pode sobrescrever isto na tela de configurações futuramente.
+Future<void> main() async {
+  // O endereço do backend é carregado de assets/config.json.
+  // Copie assets/config.example.json para assets/config.json e edite.
+  WidgetsFlutterBinding.ensureInitialized();
+  await ApiClient.init();
   runApp(const FluxoCaixaApp());
 }
 
@@ -39,7 +39,8 @@ class FluxoCaixaApp extends StatelessWidget {
 class ApiBaseUrlSetting {
   /// Permite ajustar o endereço do backend em tempo de execução.
   /// O app é single-user; não há settings persistidos nesta versão.
-  static void setBaseUrl(String url) {
+  /// Passe `null` para voltar a usar o valor de `assets/config.json`.
+  static void setBaseUrl(String? url) {
     ApiClient.baseUrl = url;
   }
 }
