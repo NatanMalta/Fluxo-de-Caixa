@@ -74,10 +74,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                 if (contas.isEmpty)
                   const _VazioView()
                 else
-                  for (final c in contas) ...[
-                    _ContaTile(conta: c),
-                    const SizedBox(height: 8),
-                  ],
+                  _ContasList(contas: contas),
                 const SizedBox(height: 8),
                 _UltimosLancamentosSecao(
                   future: _futureRecentes,
@@ -408,6 +405,90 @@ class _RecenteTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ContasList extends StatefulWidget {
+  final List<Conta> contas;
+  const _ContasList({required this.contas});
+
+  @override
+  State<_ContasList> createState() => _ContasListState();
+}
+
+class _ContasListState extends State<_ContasList> {
+  late final TextEditingController _searchCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _searchCtrl,
+      builder: (context, value, _) {
+        final query = value.text.trim().toLowerCase();
+        final filtered = query.isEmpty
+            ? widget.contas
+            : widget.contas
+                  .where((c) => c.nome.toLowerCase().contains(query))
+                  .toList();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Buscar por nome',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: value.text.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Limpar',
+                        onPressed: () => _searchCtrl.clear(),
+                      ),
+              ),
+            ),
+            if (filtered.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  "Nenhuma conta encontrada para '${value.text.trim()}'.",
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                // Sem `itemExtent` aqui: o `_ContaTile` envolve um `Card`,
+                // então a altura é variável e um valor fixo cortaria o
+                // conteúdo. A 5-20 contas a virtualização do `ListView.builder`
+                // já é suficiente.
+                itemCount: filtered.length,
+                itemBuilder: (context, i) {
+                  final c = filtered[i];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _ContaTile(conta: c),
+                  );
+                },
+              ),
+          ],
+        );
+      },
     );
   }
 }

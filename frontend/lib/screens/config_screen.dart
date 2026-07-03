@@ -115,25 +115,9 @@ class _SecaoContas extends StatelessWidget {
                     ),
                   );
                 }
-                return Column(
-                  children: contas
-                      .map(
-                        (c) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            c.isEspecie
-                                ? Icons.payments_outlined
-                                : Icons.account_balance_outlined,
-                          ),
-                          title: Text(c.nome),
-                          subtitle: Text(
-                            '${c.isEspecie ? "Espécie" : "Banco"} • Saldo inicial: R\$ ${c.saldoInicial.toStringAsFixed(2)}'
-                            '${!c.ativo ? "  •  INATIVA" : ""}',
-                          ),
-                          onTap: () => _abrirDialogConta(context, c),
-                        ),
-                      )
-                      .toList(),
+                return _ContasList(
+                  contas: contas,
+                  onEditConta: (c) => _abrirDialogConta(context, c),
                 );
               },
             ),
@@ -248,6 +232,7 @@ class _SecaoContas extends StatelessWidget {
     }
   }
 }
+
 
 class _SecaoCategorias extends StatelessWidget {
   final String titulo;
@@ -399,3 +384,96 @@ class _SecaoCategorias extends StatelessWidget {
     }
   }
 }
+
+class _ContasList extends StatefulWidget {
+  final List<Conta> contas;
+  final void Function(Conta) onEditConta;
+  const _ContasList({required this.contas, required this.onEditConta});
+
+  @override
+  State<_ContasList> createState() => _ContasListState();
+}
+
+class _ContasListState extends State<_ContasList> {
+  late final TextEditingController _searchCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _searchCtrl,
+      builder: (context, value, _) {
+        final query = value.text.trim().toLowerCase();
+        final filtered = query.isEmpty
+            ? widget.contas
+            : widget.contas
+                  .where((c) => c.nome.toLowerCase().contains(query))
+                  .toList();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Buscar por nome',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: value.text.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Limpar',
+                        onPressed: () => _searchCtrl.clear(),
+                      ),
+              ),
+            ),
+            if (filtered.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  "Nenhuma conta encontrada para '${value.text.trim()}'.",
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              )
+            else
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemExtent: 56,
+                itemCount: filtered.length,
+                itemBuilder: (context, i) {
+                  final c = filtered[i];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      c.isEspecie
+                          ? Icons.payments_outlined
+                          : Icons.account_balance_outlined,
+                    ),
+                    title: Text(c.nome),
+                    subtitle: Text(
+                      '${c.isEspecie ? "Espécie" : "Banco"} • Saldo inicial: R\$ ${c.saldoInicial.toStringAsFixed(2)}'
+                      '${!c.ativo ? "  •  INATIVA" : ""}',
+                    ),
+                    onTap: () => widget.onEditConta(c),
+                  );
+                },
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
