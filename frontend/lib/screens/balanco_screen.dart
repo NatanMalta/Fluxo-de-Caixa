@@ -193,6 +193,7 @@ class _TotaisCards extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positivo = balanco.resultado >= 0;
+    final saldoPositivo = balanco.saldoTotal >= 0;
     return Column(
       children: [
         _TotalCard(
@@ -214,6 +215,14 @@ class _TotaisCards extends StatelessWidget {
           valor: balanco.resultado,
           cor: positivo ? Colors.green.shade800 : Colors.red.shade800,
           icone: positivo ? Icons.trending_up : Icons.trending_down,
+          destaque: true,
+        ),
+        const SizedBox(height: 8),
+        _TotalCard(
+          titulo: 'Saldo total',
+          valor: balanco.saldoTotal,
+          cor: saldoPositivo ? Colors.green.shade800 : Colors.red.shade800,
+          icone: Icons.account_balance_wallet,
           destaque: true,
         ),
       ],

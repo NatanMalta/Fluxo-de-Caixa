@@ -34,6 +34,7 @@ class Balanco {
   final double totalEntradas;
   final double totalSaidas;
   final double resultado;
+  final double saldoTotal;
   final List<ContaSaldo> saldosPorConta;
   final List<CategoriaTotal> entradasPorCategoria;
   final List<CategoriaTotal> saidasPorCategoria;
@@ -44,6 +45,7 @@ class Balanco {
     required this.totalEntradas,
     required this.totalSaidas,
     required this.resultado,
+    required this.saldoTotal,
     required this.saldosPorConta,
     required this.entradasPorCategoria,
     required this.saidasPorCategoria,
@@ -55,6 +57,7 @@ class Balanco {
     totalEntradas: (j['totalEntradas'] as num).toDouble(),
     totalSaidas: (j['totalSaidas'] as num).toDouble(),
     resultado: (j['resultado'] as num).toDouble(),
+    saldoTotal: (j['saldoTotal'] as num).toDouble(),
     saldosPorConta: (j['saldosPorConta'] as List<dynamic>)
         .map((e) => ContaSaldo.fromJson(e as Map<String, dynamic>))
         .toList(),

@@ -97,12 +97,15 @@ public class BalancoController : ControllerBase
             .OrderByDescending(x => x.Total)
             .ToList();
 
+        var saldoTotal = saldosPorConta.Sum(c => c.Saldo);
+
         return Ok(new BalancoResponse(
             inicioDate,
             fim.Date,
             totalEntradas,
             totalSaidas,
             totalEntradas - totalSaidas,
+            saldoTotal,
             saldosPorConta,
             entradasPorCategoria,
             saidasPorCategoria));
@@ -116,6 +119,7 @@ public class BalancoController : ControllerBase
         decimal TotalEntradas,
         decimal TotalSaidas,
         decimal Resultado,
+        decimal SaldoTotal,
         List<ContaSaldo> SaldosPorConta,
         List<CategoriaTotal> EntradasPorCategoria,
         List<CategoriaTotal> SaidasPorCategoria);

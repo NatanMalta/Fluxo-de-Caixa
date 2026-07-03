@@ -38,11 +38,11 @@ Valor em dinheiro de uma Conta em um instante no tempo. Calculado em tempo de le
 _Avoid_: "saldo atual" (data-dependente, melhor dizer "saldo em DD/MM"), "saldo contábil" (linguagem formal), "balanço" (conceito diferente — ver adiante).
 
 **Saldo total**:
-Soma dos saldos correntes de todas as Contas ativas do dono. Representa "quanto de dinheiro o dono tem agora no total", somando caixa físico, contas bancárias, contas digitais e qualquer outro lugar onde o mercadinho guarda dinheiro. É derivado, calculado em tempo de leitura a partir de `saldoAtual` de cada Conta ativa. Diferente de `Resultado` (Entradas − Saídas de um período) e de `Balanço` (tela de período). Aparece em destaque na tela de início.
+Soma dos saldos correntes de todas as Contas ativas do dono. Representa "quanto de dinheiro o dono tem agora no total", somando caixa físico, contas bancárias, contas digitais e qualquer outro lugar onde o mercadinho guarda dinheiro. É derivado, calculado em tempo de leitura a partir de `saldoAtual` de cada Conta ativa. Diferente de `Resultado` (Entradas − Saídas de um período) e de `Balanço` (tela de período). Aparece em destaque na tela de início e na aba Balanço (no fim do período selecionado).
 _Avoid_: "patrimônio" (linguagem contábil formal, fora do escopo), "saldo consolidado" (soa como relatório), "saldo geral" (ambíguo).
 
 **Balanço**:
-Tela de visualização que resume o estado financeiro em um período. Tem seletor de período (dia / mês / ano) e mostra: total de Entradas no período, total de Saídas, Resultado (Entradas − Saídas, sem contar Transferências), Saldo de cada Conta no fim do período, e detalhamento por Categoria (quais Categorias de Entrada trouxeram mais, quais Categorias de Saída pesaram mais). Filtros por Conta e por Categoria ficam disponíveis.
+Tela de visualização que resume o estado financeiro em um período. Tem seletor de período (dia / mês / ano) e mostra: total de Entradas no período, total de Saídas, Resultado (Entradas − Saídas, sem contar Transferências), Saldo total no fim do período, Saldo de cada Conta no fim do período, e detalhamento por Categoria (quais Categorias de Entrada trouxeram mais, quais Categorias de Saída pesaram mais). Filtros por Conta e por Categoria ficam disponíveis.
 _Avoid_: "DRE" (linguagem contábil formal, fora do escopo), "fluxo de caixa" (sinônimo do app inteiro, não de uma tela), "relatório" (genérico demais).
 
 **Loja**:
