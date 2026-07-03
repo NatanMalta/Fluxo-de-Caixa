@@ -341,23 +341,12 @@ class LancarScreenState extends State<LancarScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Text(
-                  _editando == null ? 'Novo lançamento' : 'Editar lançamento',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (_editando != null) ...[
-                  const Spacer(),
-                  TextButton(
-                    onPressed: _limparFormulario,
-                    child: const Text('Cancelar'),
-                  ),
-                ],
-              ],
+            Text(
+              _editando == null ? 'Novo lançamento' : 'Editar lançamento',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 12),
             SegmentedButton<String>(
@@ -445,19 +434,35 @@ class LancarScreenState extends State<LancarScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _salvando ? null : () => _salvar(dados),
-              icon: _salvando
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Icon(_editando == null ? Icons.add : Icons.save),
-              label: Text(_editando == null ? 'Salvar' : 'Salvar alterações'),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _salvando ? null : _limparFormulario,
+                  icon: Icon(
+                    _editando == null ? Icons.cleaning_services_outlined : Icons.close,
+                  ),
+                  label: Text(_editando == null ? 'Limpar' : 'Cancelar'),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _salvando ? null : () => _salvar(dados),
+                    icon: _salvando
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(_editando == null ? Icons.add : Icons.save),
+                    label: Text(
+                      _editando == null ? 'Salvar' : 'Salvar alterações',
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
