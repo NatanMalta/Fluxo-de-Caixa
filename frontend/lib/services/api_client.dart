@@ -44,16 +44,20 @@ class ApiClient {
 
   /// Carrega `assets/config.json`. Deve ser chamado uma vez no startup,
   /// antes de qualquer chamada HTTP (tipicamente no `main()`).
-  /// Falha silenciosa: se o arquivo não existir ou estiver inválido,
-  /// o app segue com [_defaultBaseUrl].
+  /// Falha silenciosa: se o arquivo não existir, estiver inválido,
+  /// ou o `apiBaseUrl` não tiver scheme http(s), o app segue com
+  /// [_defaultBaseUrl].
   static Future<void> init() async {
     try {
       final raw = await rootBundle.loadString('assets/config.json');
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final url = json['apiBaseUrl'];
-      if (url is String && url.isNotEmpty) {
+      if (url is String &&
+          url.isNotEmpty &&
+          (url.startsWith('http://') || url.startsWith('https://'))) {
         _loadedBaseUrl = url;
       }
+      // Silencia JSON inválido, valor ausente, ou scheme não suportado.
     } catch (_) {
       // Mantém _loadedBaseUrl = null; cai no _defaultBaseUrl.
     }
