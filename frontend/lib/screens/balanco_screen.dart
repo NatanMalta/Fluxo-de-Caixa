@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models/balanco.dart';
 import '../services/api_client.dart';
+import '../services/data_invalidator.dart';
 import '../services/periodo_calculator.dart';
 
 class BalancoScreen extends StatefulWidget {
@@ -16,24 +17,13 @@ class _BalancoScreenState extends State<BalancoScreen> {
   PeriodoBalanco _periodo = PeriodoBalanco.esteMes;
   DateTime? _customInicio;
   DateTime? _customFim;
-  Future<Balanco>? _future;
 
-  @override
-  void initState() {
-    super.initState();
-    _recalcular();
-  }
-
+  /// Recarrega o Balanço disparando o notifier do `DataInvalidator`
+  /// (ver ADR 0006). Chamado pelo pull-to-refresh, pelo botão de refresh
+  /// do AppBar, e indiretamente por qualquer mutação de Conta/Categoria/
+  /// Lançamento que bumpe `DataInvalidator.balanco`.
   void _recalcular() {
-    final p = calcularPeriodo(
-      _periodo,
-      referencia: DateTime.now(),
-      customInicio: _customInicio,
-      customFim: _customFim,
-    );
-    setState(() {
-      _future = ApiClient.obterBalanco(inicio: p.inicio, fim: p.fim);
-    });
+    DataInvalidator.balanco.value++;
   }
 
   void _mudarPeriodo(PeriodoBalanco novo) async {
@@ -95,49 +85,60 @@ class _BalancoScreenState extends State<BalancoScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: () async => _recalcular(),
-        child: FutureBuilder<Balanco>(
-          future: _future,
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snap.hasError) {
-              return _ErroView(
-                mensagem: snap.error.toString(),
-                onRetry: _recalcular,
-              );
-            }
-            final b = snap.data!;
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    _rotuloPeriodo,
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _TotaisCards(balanco: b),
-                const SizedBox(height: 16),
-                _SecaoSaldosPorConta(saldos: b.saldosPorConta),
-                const SizedBox(height: 16),
-                _SecaoCategorias(
-                  titulo: 'Entradas por categoria',
-                  itens: b.entradasPorCategoria,
-                  cor: Colors.green.shade700,
-                  icone: Icons.arrow_upward,
-                ),
-                const SizedBox(height: 16),
-                _SecaoCategorias(
-                  titulo: 'Saídas por categoria',
-                  itens: b.saidasPorCategoria,
-                  cor: Colors.red.shade700,
-                  icone: Icons.arrow_downward,
-                ),
-                const SizedBox(height: 24),
-              ],
+        child: ListenableBuilder(
+          listenable: DataInvalidator.balanco,
+          builder: (context, _) {
+            final p = calcularPeriodo(
+              _periodo,
+              referencia: DateTime.now(),
+              customInicio: _customInicio,
+              customFim: _customFim,
+            );
+            return FutureBuilder<Balanco>(
+              future: ApiClient.obterBalanco(inicio: p.inicio, fim: p.fim),
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return _ErroView(
+                    mensagem: snap.error.toString(),
+                    onRetry: _recalcular,
+                  );
+                }
+                final b = snap.data!;
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        _rotuloPeriodo,
+                        style: const TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _TotaisCards(balanco: b),
+                    const SizedBox(height: 16),
+                    _SecaoSaldosPorConta(saldos: b.saldosPorConta),
+                    const SizedBox(height: 16),
+                    _SecaoCategorias(
+                      titulo: 'Entradas por categoria',
+                      itens: b.entradasPorCategoria,
+                      cor: Colors.green.shade700,
+                      icone: Icons.arrow_upward,
+                    ),
+                    const SizedBox(height: 16),
+                    _SecaoCategorias(
+                      titulo: 'Saídas por categoria',
+                      itens: b.saidasPorCategoria,
+                      cor: Colors.red.shade700,
+                      icone: Icons.arrow_downward,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                );
+              },
             );
           },
         ),

@@ -4,6 +4,7 @@ import '../main.dart';
 import '../models/conta.dart';
 import '../models/lancamento.dart';
 import '../services/api_client.dart';
+import '../services/data_invalidator.dart';
 
 /// Quantos Lançamentos exibir no widget "Últimos lançamentos" do Dashboard.
 const int _kRecentesMax = 5;
@@ -21,24 +22,12 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class DashboardScreenState extends State<DashboardScreen> {
-  late Future<List<Conta>> _futureContas;
-  late Future<List<Lancamento>> _futureRecentes;
-
-  @override
-  void initState() {
-    super.initState();
-    _futureContas = ApiClient.listarContas();
-    _futureRecentes = ApiClient.listarLancamentos();
-  }
-
-  /// Re-busca Contas e últimos Lançamentos. Chamado pelo pull-to-refresh,
-  /// pelo botão de refresh do AppBar e pelo `HomeScreen` quando o usuário
-  /// volta da aba Lançar (ver ADR 0004).
+  /// Re-busca Contas e últimos Lançamentos disparando os notifiers do
+  /// `DataInvalidator` (ver ADR 0006). Chamado pelo pull-to-refresh e
+  /// pelo botão de refresh do AppBar.
   Future<void> atualizar() async {
-    setState(() {
-      _futureContas = ApiClient.listarContas();
-      _futureRecentes = ApiClient.listarLancamentos();
-    });
+    DataInvalidator.contas.value++;
+    DataInvalidator.lancamentos.value++;
   }
 
   @override
@@ -52,38 +41,43 @@ class DashboardScreenState extends State<DashboardScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: atualizar,
-        child: FutureBuilder<List<Conta>>(
-          future: _futureContas,
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snap.hasError) {
-              return _ErroView(
-                mensagem: snap.error.toString(),
-                onRetry: atualizar,
-              );
-            }
-            final contas = snap.data ?? <Conta>[];
-            final saldoTotal = contas.fold<double>(0, (acc, c) => acc + c.saldoAtual);
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _SaldoTotalCard(valor: saldoTotal),
-                const SizedBox(height: 16),
-                if (contas.isEmpty)
-                  const _VazioView()
-                else
-                  _ContasList(contas: contas),
-                const SizedBox(height: 8),
-                _UltimosLancamentosSecao(
-                  future: _futureRecentes,
-                  onTap: widget.onTapLancamento,
+        child: ListenableBuilder(
+          listenable: DataInvalidator.contas,
+          builder: (context, _) => FutureBuilder<List<Conta>>(
+            future: ApiClient.listarContas(),
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError) {
+                return _ErroView(
+                  mensagem: snap.error.toString(),
                   onRetry: atualizar,
-                ),
-              ],
-            );
-          },
+                );
+              }
+              final contas = snap.data ?? <Conta>[];
+              final saldoTotal = contas.fold<double>(0, (acc, c) => acc + c.saldoAtual);
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _SaldoTotalCard(valor: saldoTotal),
+                  const SizedBox(height: 16),
+                  if (contas.isEmpty)
+                    const _VazioView()
+                  else
+                    _ContasList(contas: contas),
+                  const SizedBox(height: 8),
+                  ListenableBuilder(
+                    listenable: DataInvalidator.lancamentos,
+                    builder: (context, _) => _UltimosLancamentosSecao(
+                      onTap: widget.onTapLancamento,
+                      onRetry: atualizar,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -242,13 +236,15 @@ class _SaldoTotalCard extends StatelessWidget {
 /// Mostra os `_kRecentesMax` Lançamentos mais recentes como tiles tocáveis.
 /// Tocar em um tile invoca [onTap], que o `HomeScreen` usa para acionar a
 /// edição na aba Lançar (ver ADR 0004).
+///
+/// O `Future` é construído inline — o `ListenableBuilder` que envolve
+/// esta seção no `build` rebuilda quando `DataInvalidator.lancamentos`
+/// é bumpado (ver ADR 0006).
 class _UltimosLancamentosSecao extends StatelessWidget {
-  final Future<List<Lancamento>> future;
   final ValueChanged<Lancamento>? onTap;
   final VoidCallback onRetry;
 
   const _UltimosLancamentosSecao({
-    required this.future,
     required this.onTap,
     required this.onRetry,
   });
@@ -277,7 +273,7 @@ class _UltimosLancamentosSecao extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             FutureBuilder<List<Lancamento>>(
-              future: future,
+              future: ApiClient.listarLancamentos(),
               builder: (context, snap) {
                 if (snap.connectionState != ConnectionState.done) {
                   return const Padding(

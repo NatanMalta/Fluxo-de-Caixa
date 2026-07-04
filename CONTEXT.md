@@ -50,5 +50,9 @@ O mercadinho opera em **uma loja única**. Não há dimensão "loja" no modelo d
 _Avoid_: "filial" (sugere rede), "unidade" (linguagem de rede), "PDV" (sistema, não loja física).
 
 **Usuário**:
-A aplicação tem **um único usuário** — o dono do mercadinho. Não há tela de login, não há cadastro de usuários, não há papéis. O acesso é protegido opcionalmente por um PIN local no dispositivo (pra não abrir acidentalmente no celular), mas todos os dados são de uma única pessoa.
+A aplicação tem **um único usuário** — o dono do mercadinho. Não há cadastro de usuários, não há papéis, não há fluxo de "esqueci minha senha" no app. Toda a autenticação é centralizada no **PIN** (ver termo) que o dono configura uma vez no `appsettings.json` do backend e usa em todos os dispositivos onde o app é instalado.
 _Avoid_: "admin" (papel), "operador" (papel), "conta de usuário" (sugere múltiplos).
+
+**PIN**:
+Sequência numérica curta (4 a 6 dígitos) definida pelo dono do mercadinho no `appsettings.json` do backend. Serve dois propósitos simultâneos: (1) **trava do dispositivo** — tela de bloqueio no app Flutter exibida na abertura, para impedir abertura acidental no celular; (2) **credencial de API** — o app troca o PIN por um JWT (válido 30 dias) no `POST /api/auth/login`, e todas as chamadas seguintes à API exigem `Authorization: Bearer <jwt>`. O backend hasheia o PIN em memória no startup e nunca mais o lê em claro. Trocar o PIN é editar o `appsettings.json` e reiniciar o backend; o app no celular pede o novo PIN automaticamente na próxima abertura. Brute force em `POST /api/auth/login` é mitigado por rate limit fixo de 5 tentativas/min por IP (ver ADR 0007).
+_Avoid_: "senha" (implica mistura de caracteres que o PIN numérico não tem), "password" (jargão de web), "token" (o JWT é a consequência, não o próprio PIN).

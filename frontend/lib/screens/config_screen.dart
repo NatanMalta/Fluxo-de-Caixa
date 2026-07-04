@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/conta.dart';
 import '../models/categoria.dart';
 import '../services/api_client.dart';
+import '../services/data_invalidator.dart';
 
 class ConfigScreen extends StatefulWidget {
   const ConfigScreen({super.key});
@@ -222,6 +223,11 @@ class _SecaoContas extends StatelessWidget {
           ),
         );
       }
+      // Notifica as outras telas — Conta nova/renomeada/inativada
+      // afeta o Dashboard (saldos), o Lançar (dropdown de conta) e
+      // o Balanço (saldosPorConta/saldoTotal). Ver ADR 0006.
+      DataInvalidator.contas.value++;
+      DataInvalidator.balanco.value++;
       onChanged();
     } catch (e) {
       if (context.mounted) {
@@ -374,6 +380,13 @@ class _SecaoCategorias extends StatelessWidget {
           ),
         );
       }
+      // Notifica as outras telas — Categoria nova/renomeada/inativada
+      // afeta o Lançar (dropdowns do formulário), o Dashboard
+      // (categoriaNome joinado nos últimos lançamentos) e o Balanço
+      // (quebra por categoria). Ver ADR 0006.
+      DataInvalidator.categorias.value++;
+      DataInvalidator.balanco.value++;
+      DataInvalidator.lancamentos.value++;
       onChanged();
     } catch (e) {
       if (context.mounted) {

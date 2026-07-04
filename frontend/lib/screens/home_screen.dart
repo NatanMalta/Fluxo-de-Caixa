@@ -7,12 +7,15 @@ import 'balanco_screen.dart';
 import 'config_screen.dart';
 
 /// Shell da aplicação. Mantém as quatro tabs como filhas irmãs que ficam
-/// montadas durante a troca de abas (ver ADR 0004). A coordenação entre tabs
-/// (Dashboard ↔ Lançar) é feita por `GlobalKey<State>` e dois canais:
-///   - `onTapLancamento` (Dashboard → Lançar): editar um lançamento
-///     selecionado no widget de últimos lançamentos.
-///   - Observador de troca de tab (Lançar → Início): recarrega o Dashboard
-///     para refletir mutações feitas no Lançar.
+/// montadas durante a troca de abas (ver ADR 0004).
+///
+/// Coordenação entre tabs (ver ADR 0006 — `DataInvalidator`):
+/// - `DataInvalidator` cuida da propagação de mutações: cada tela
+///   escuta os notifiers relevantes via `ListenableBuilder` e as
+///   mutações bumparam o notifier apropriado depois do `await`.
+/// - O canal `onTapLancamento` (Dashboard → Lançar) ainda vale: ele
+///   cuida de "saltar para a aba Lançar com o form pré-preenchido",
+///   não de refresh.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -23,8 +26,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _indice = 0;
 
-  // GlobalKeys para acessar os State públicos das filhas (ver ADR 0004).
-  final _dashboardKey = GlobalKey<DashboardScreenState>();
+  // Mantido: o `LancarScreen.editar(Lancamento)` é o canal da direção
+  // Dashboard → Lançar (saltar para a aba com o form pré-preenchido).
+  // Ver ADR 0004.
   final _lancarKey = GlobalKey<LancarScreenState>();
 
   /// Handler do `onTapLancamento` do Dashboard:
@@ -34,13 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _indice = 1);
   }
 
-  /// Chamado em toda troca de aba. Se o usuário saiu de Lançar (1) e voltou
-  /// para o Início (0), recarregamos o Dashboard para refletir mutações
-  /// feitas no Lançar (criar, editar, excluir).
   void _aoTrocarAba(int novo) {
-    if (_indice == 1 && novo == 0) {
-      _dashboardKey.currentState?.atualizar();
-    }
     setState(() => _indice = novo);
   }
 
@@ -50,10 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(
         index: _indice,
         children: [
-          DashboardScreen(
-            key: _dashboardKey,
-            onTapLancamento: _onTapLancamento,
-          ),
+          DashboardScreen(onTapLancamento: _onTapLancamento),
           LancarScreen(key: _lancarKey),
           const BalancoScreen(),
           const ConfigScreen(),

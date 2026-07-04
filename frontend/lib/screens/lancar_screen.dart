@@ -7,6 +7,7 @@ import '../models/categoria.dart';
 import '../models/conta.dart';
 import '../models/lancamento.dart';
 import '../services/api_client.dart';
+import '../services/data_invalidator.dart';
 import '../services/lancamento_dto_builder.dart';
 import '../services/valor_parser.dart';
 
@@ -23,9 +24,6 @@ class LancarScreen extends StatefulWidget {
 }
 
 class LancarScreenState extends State<LancarScreen> {
-  // -- Estado de carregamento de dados auxiliares (contas e categorias) --
-  late Future<_LancarDados> _futureDados;
-
   // -- Estado do formulário --
   String? _tipo; // 'comum' | 'ajuste' | 'transferencia'
   String? _sentido; // 'entrada' | 'saida' (Comum e Ajuste)
@@ -43,15 +41,6 @@ class LancarScreenState extends State<LancarScreen> {
   Lancamento? _editando;
   bool _salvando = false;
 
-  // -- Estado da lista "Lançamentos de hoje" --
-  Future<List<Lancamento>>? _futureHoje;
-
-  @override
-  void initState() {
-    super.initState();
-    _carregarTudo();
-  }
-
   @override
   void dispose() {
     _valorCtrl.dispose();
@@ -59,11 +48,13 @@ class LancarScreenState extends State<LancarScreen> {
     super.dispose();
   }
 
-  void _carregarTudo() {
-    setState(() {
-      _futureDados = _carregarDados();
-      _futureHoje = _carregarHoje();
-    });
+  /// Recarrega Contas/Categorias e a lista de Lançamentos de hoje
+  /// disparando os notifiers do `DataInvalidator` (ver ADR 0006).
+  /// Chamado pelo botão de refresh do AppBar e pelo pull-to-refresh.
+  Future<void> _atualizarTudo() async {
+    DataInvalidator.contas.value++;
+    DataInvalidator.categorias.value++;
+    DataInvalidator.lancamentos.value++;
   }
 
   Future<_LancarDados> _carregarDados() async {
@@ -215,8 +206,12 @@ class LancarScreenState extends State<LancarScreen> {
       } else {
         await ApiClient.criarLancamento(dto);
       }
+      // Bump dos notifiers de Lançamentos e Balanço — o
+      // `DataInvalidator` cuida do refresh em todas as telas
+      // interessadas (ver ADR 0006).
+      DataInvalidator.lancamentos.value++;
+      DataInvalidator.balanco.value++;
       _limparFormulario();
-      _carregarTudo();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -265,7 +260,9 @@ class LancarScreenState extends State<LancarScreen> {
     try {
       await ApiClient.excluirLancamento(l.id);
       if (_editando?.id == l.id) _limparFormulario();
-      _carregarTudo();
+      // Bump dos notifiers de Lançamentos e Balanço — ver ADR 0006.
+      DataInvalidator.lancamentos.value++;
+      DataInvalidator.balanco.value++;
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -294,41 +291,46 @@ class LancarScreenState extends State<LancarScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _carregarTudo,
+            onPressed: _atualizarTudo,
             tooltip: 'Atualizar',
           ),
         ],
       ),
-      body: FutureBuilder<_LancarDados>(
-        future: _futureDados,
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return _ErroView(
-              mensagem: snap.error.toString(),
-              onRetry: _carregarTudo,
+      body: ListenableBuilder(
+        listenable: Listenable.merge(
+          [DataInvalidator.contas, DataInvalidator.categorias],
+        ),
+        builder: (context, _) => FutureBuilder<_LancarDados>(
+          future: _carregarDados(),
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) {
+              return _ErroView(
+                mensagem: snap.error.toString(),
+                onRetry: _atualizarTudo,
+              );
+            }
+            final dados = snap.data!;
+            if (dados.contas.isEmpty) {
+              return const _VazioSemContas();
+            }
+            return RefreshIndicator(
+              onRefresh: _atualizarTudo,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _buildForm(dados),
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  _buildListaHoje(),
+                ],
+              ),
             );
-          }
-          final dados = snap.data!;
-          if (dados.contas.isEmpty) {
-            return const _VazioSemContas();
-          }
-          return RefreshIndicator(
-            onRefresh: () async => _carregarTudo(),
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildForm(dados),
-                const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 8),
-                _buildListaHoje(),
-              ],
-            ),
-          );
-        },
+          },
+        ),
       ),
     );
   }
@@ -482,47 +484,52 @@ class LancarScreenState extends State<LancarScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        FutureBuilder<List<Lancamento>>(
-          future: _futureHoje,
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.all(8),
-                child: LinearProgressIndicator(),
+        // Re-fira quando `DataInvalidator.lancamentos` for bumpado
+        // (criação/edição/exclusão de Lançamento) — ver ADR 0006.
+        ListenableBuilder(
+          listenable: DataInvalidator.lancamentos,
+          builder: (context, _) => FutureBuilder<List<Lancamento>>(
+            future: _carregarHoje(),
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: LinearProgressIndicator(),
+                );
+              }
+              final lista = snap.data ?? <Lancamento>[];
+              if (lista.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 16,
+                    horizontal: 4,
+                  ),
+                  child: Text(
+                    'Nenhum lançamento hoje ainda.',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                );
+              }
+              return Column(
+                children: lista
+                    .map(
+                      (l) => _LancamentoTile(
+                        lancamento: l,
+                        onEdit: () {
+                          _prefillFromLancamento(l);
+                          Scrollable.ensureVisible(
+                            context,
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOut,
+                          );
+                        },
+                        onDelete: () => _excluir(l),
+                      ),
+                    )
+                    .toList(),
               );
-            }
-            final lista = snap.data ?? <Lancamento>[];
-            if (lista.isEmpty) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 16,
-                  horizontal: 4,
-                ),
-                child: Text(
-                  'Nenhum lançamento hoje ainda.',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              );
-            }
-            return Column(
-              children: lista
-                  .map(
-                    (l) => _LancamentoTile(
-                      lancamento: l,
-                      onEdit: () {
-                        _prefillFromLancamento(l);
-                        Scrollable.ensureVisible(
-                          context,
-                          duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOut,
-                        );
-                      },
-                      onDelete: () => _excluir(l),
-                    ),
-                  )
-                  .toList(),
-            );
-          },
+            },
+          ),
         ),
       ],
     );
