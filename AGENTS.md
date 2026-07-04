@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-- **Type**: Two-tier local app — Flutter (web + Android) frontend + ASP.NET 10 Web API backend
-- **Persistence**: SQLite (single file: `backend/FluxoCaixa.Api/fluxo_caixa.db`)
-- **Deployment**: Local server (PC) inside the store, accessed via Wi-Fi. No cloud, no internet.
+- **Type**: Two-tier local app — Flutter (web + Android) frontend + ASP.NET 10 Web API backend, both running on the same Windows PC
+- **Persistence**: SQLite (single file). **Path must be absolute when running as a Windows Service** — relative paths resolve to `C:\Windows\System32\` (the SCM's default CWD), and the database ends up in a folder that survives reinstalls but is not where you expect. The deployed `appsettings.json` points to an absolute path (e.g., `C:/FluxoCaixa/fluxo_caixa.db`); the versioned `appsettings.Development.json` keeps a relative path for `dotnet run` so dev and prod don't share a database.
+- **Deployment**: Local server (PC) inside the store, accessed via Wi-Fi or Tailscale. No cloud, no internet. Backend runs as a Windows Service via `sc.exe`; the Flutter web build is served by the same Kestrel process. See `scripts/install-service.ps1` and `scripts/deploy-frontend.ps1`.
 - **Users**: Single user (the store owner). No roles. Auth via single PIN — see ADR 0007.
 
 ## Key Directories
@@ -42,6 +42,7 @@
 - **`AppDbContext`** manages `criado_em` / `atualizado_em` automatically in `SaveChanges`
 - **CORS** is open to any origin (local app, no security boundary)
 - **URL** is fixed to `http://0.0.0.0:5000` in `Program.cs` so LAN clients can connect
+- **Logging**: a custom `FileLoggerProvider` (`backend/FluxoCaixa.Api/Logging/FileLoggerProvider.cs`) writes to `publish/logs/fluxo-caixa.log`, append-only, no rotation. The standard Console provider is also active (visible when running `dotnet run`, useless under a Windows Service). To tail the service log: `Get-Content publish\logs\fluxo-caixa.log -Wait` in PowerShell, or `tail -F publish/logs/fluxo-caixa.log` in Git Bash. The startup log also enumerates the LAN URLs the service is reachable on — handy for finding the IP after install.
 - **Auth** (see ADR 0007): single-PIN scheme. All controllers require `[Authorize]` (or a global `RequireAuthenticatedUser()` policy). `POST /api/auth/login` accepts the PIN and returns a 30-day JWT signed with a secret from `appsettings.json`. Brute force on `/api/auth/login` is mitigated with a fixed rate limit (5 attempts/min/IP) via `Microsoft.AspNetCore.RateLimiting`.
 
 ## Frontend Conventions
@@ -56,6 +57,12 @@
   - Web on the same PC: `http://localhost:5000`
   - Android emulator: `http://10.0.2.2:5000`
   - Web/Android on LAN: `http://<PC_IP>:5000`
+  - Web/Android on Tailscale: `http://<PC_TAILSCALE_IP>:5000` (e.g., `100.x.x.x`)
+
+  The `apiBaseUrl` is **baked into the JS bundle at `flutter build web` time**. Changing the URL means rebuilding the Flutter app and re-running `scripts/deploy-frontend.ps1`. There is no runtime override in v1.
+- **Frontend hosting**: in production, the Flutter web build is served by the **same Kestrel** process as the API. The build output lands in `backend/FluxoCaixa.Api/wwwroot/` (via `scripts/deploy-frontend.ps1`), and Kestrel serves both `/api/*` (the API) and everything else (the SPA, with a deep-link fallback to `index.html`). Two non-obvious behaviors are documented in ADRs:
+  - **ADR 0008**: the SPA fallback must carry `.AllowAnonymous()`. Without it, the global `RequireAuthenticatedUser()` policy returns 401 on every deep link (`/lancar`, `/balanco`, `/config`), and the user never sees the PIN screen.
+  - **ADR 0009**: the Flutter web bundling places pubspec assets at `<webroot>/assets/assets/<file>` (note the duplicated `assets/`), but the `AssetManifest.bin` tells the runtime to fetch from `/assets/<file>`. The server compensates with a second `UseStaticFiles` registration that maps `/assets/*` to `<webroot>/assets/assets/`. Without this alias, `ApiClient.init()` silently falls back to the default `http://localhost:5000` and the login fails with "could not connect to server".
 - **No tests** in v1. Add `test/` files as the project grows.
 - **Auth** (see ADR 0007): PIN lock screen on app open, JWT in memory in `ApiClient`, PIN re-prompted on 401. The JWT is never written to `localStorage`/`SharedPreferences` because Flutter web's `flutter_secure_storage` is encrypted with a JS-only key — the only honest storage is memory + re-prompt on reopen.
 
@@ -84,17 +91,31 @@ O ônus do `DataInvalidator` é "esqueci o bump = tela stale silenciosamente". P
 ## Build & Run
 
 ```bash
-# Backend
+# Backend (dev)
 cd backend/FluxoCaixa.Api
 dotnet run
 
-# Frontend (web)
+# Frontend (dev — runs in dev mode with hot reload, talks to the backend
+# running on localhost:5000)
 cd frontend
 flutter run -d chrome
 
-# Frontend (Android)
+# Frontend (dev — Android emulator)
 flutter run -d android
 ```
+
+### Deployment to the store PC
+
+The Windows Service `FluxoCaixa` (created by `scripts/install-service.ps1`, run as Administrator) is the only thing that needs to be running on the store PC. The Flutter web is bundled into the same `publish/` directory as the API and served by the same Kestrel. Updating the deployment is a single PowerShell command:
+
+```powershell
+# From the repo root, in an Administrator PowerShell.
+.\scripts\deploy-frontend.ps1
+```
+
+This does `flutter build web` → copy to `backend/FluxoCaixa.Api/wwwroot/` → `dotnet publish` → `sc stop` → `sc start`. ~30-60s total, with ~3-5s of downtime on the LAN. The service auto-restarts on crash (configured in `install-service.ps1`).
+
+`appsettings.json` is gitignored (it contains the JWT secret and the PIN — see ADR 0007). The versioned template does not have a working config; on a fresh checkout, copy from a backup or from the store PC's deployed config before running `dotnet run` in dev.
 
 ## Adding a new field to Lançamento
 

@@ -9,6 +9,13 @@ Ponto-de-Venda/
 backend/**/bin/
 backend/**/obj/
 backend/**/out/
+backend/**/publish/
+# wwwroot/ é materializado pelo scripts/deploy-frontend.ps1 a partir de
+# `flutter build web` — nunca versionar o build do frontend no repo.
+backend/FluxoCaixa.Api/wwwroot/
+# logs/ é populado em runtime pelo FileLoggerProvider (logs/fluxo-caixa.log)
+# — não versionar o histórico de execução.
+backend/**/logs/
 backend/**/*.db
 backend/**/*.db-shm
 backend/**/*.db-wal
