@@ -12,6 +12,8 @@ backend/**/out/
 backend/**/*.db
 backend/**/*.db-shm
 backend/**/*.db-wal
+# Production appsettings contains the JWT secret and PIN — never commit (see ADR 0007)
+backend/FluxoCaixa.Api/appsettings.json
 *.user
 
 # --- Frontend (Flutter / Dart) ---
