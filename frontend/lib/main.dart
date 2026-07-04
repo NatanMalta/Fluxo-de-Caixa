@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'screens/home_screen.dart';
+import 'screens/pin_lock_screen.dart';
 import 'services/api_client.dart';
 
 Future<void> main() async {
@@ -30,7 +31,15 @@ class FluxoCaixaApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E7D32)),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      // Troca entre `HomeScreen` e `PinLockScreen` conforme o JWT em
+      // memória. O `ValueListenableBuilder` é reativo: ao receber um
+      // 401 em qualquer chamada, o `ApiClient` zera o token e a
+      // PinLockScreen volta a aparecer (ver ADR 0007).
+      home: ValueListenableBuilder<String?>(
+        valueListenable: ApiClient.tokenNotifier,
+        builder: (context, token, _) =>
+            token == null ? const PinLockScreen() : const HomeScreen(),
+      ),
       debugShowCheckedModeBanner: false,
     );
   }

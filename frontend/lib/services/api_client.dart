@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 
@@ -23,6 +25,13 @@ class ApiException implements Exception {
 /// copie `assets/config.example.json` para `assets/config.json` e edite
 /// com o IP do servidor na LAN. Em runtime, o setter `baseUrl`
 /// (ver `ApiBaseUrlSetting` no main.dart) sobrescreve o config.
+///
+/// **Auth (ADR 0007)**: o JWT retornado por `POST /api/auth/login` é
+/// mantido em memória em [_token] e adicionado a todo request por
+/// [_authHeaders]. Ao receber 401, o token é limpo e a `PinLockScreen`
+/// no nível do `MaterialApp` re-exibe o prompt de PIN. O token
+/// **nunca** é persistido (ver ADR 0007 — limitação aceita: web
+/// descarta o token ao fechar a aba).
 class ApiClient {
   /// URL usada quando nem o config nem o override estão definidos.
   /// Útil para testes locais sem `config.json`.
@@ -41,6 +50,29 @@ class ApiClient {
   /// Permite trocar a URL em runtime (ex.: tela de configurações futura).
   /// Passe `null` para voltar a usar config.json.
   static set baseUrl(String? url) => _overrideBaseUrl = url;
+
+  /// JWT em memória. `null` antes do login / após logout / após 401.
+  /// Nunca escrito em disco (ADR 0007).
+  static String? _token;
+
+  /// Notifier disparado quando o token muda (login ok, logout, 401).
+  /// O `MaterialApp` raiz escuta isto para re-exibir a `PinLockScreen`
+  /// quando `token == null`. Manter em `ValueListenable` (não `Stream`)
+  /// porque o consumidor do `MaterialApp` usa `ValueListenableBuilder`.
+  static final ValueNotifier<String?> tokenNotifier = ValueNotifier<String?>(null);
+
+  static String? get token => _token;
+  static bool get isAuthenticated => _token != null;
+
+  /// Define o token em memória. Use apenas em [AuthService.login] e
+  /// em [logout]. Dispara [tokenNotifier] para o `MaterialApp`.
+  static void setToken(String? newToken) {
+    _token = newToken;
+    tokenNotifier.value = newToken;
+  }
+
+  /// Limpa o token local. Chamado no 401 e em logout explícito.
+  static void clearToken() => setToken(null);
 
   /// Carrega `assets/config.json`. Deve ser chamado uma vez no startup,
   /// antes de qualquer chamada HTTP (tipicamente no `main()`).
@@ -70,7 +102,41 @@ class ApiClient {
     'Accept': 'application/json',
   };
 
+  /// Mesmos headers JSON, mais `Authorization: Bearer <jwt>` quando há
+  /// token. O `POST /api/auth/login` é chamado sem token e usa
+  /// [_jsonHeaders] direto.
+  static Map<String, String> get _authHeaders => {
+    ..._jsonHeaders,
+    if (_token != null) 'Authorization': 'Bearer $_token',
+  };
+
   static Uri _uri(String path) => Uri.parse('$baseUrl$path');
+
+  // -----------------------------------------------------------------
+  // Auth (ADR 0007)
+  // -----------------------------------------------------------------
+
+  /// `POST /api/auth/login` com `{ "pin": "..." }`. Em sucesso (200),
+  /// armazena o JWT em memória via [setToken] e retorna o `expiresAt`.
+  ///
+  /// Erros:
+  /// - 401 → [ApiException] com `statusCode: 401` (PIN errado ou
+  ///   formato inválido). Caller exibe mensagem ao usuário.
+  /// - 429 → rate limit estourado. Mensagem genérica do backend.
+  /// - outros → [ApiException] com o statusCode.
+  static Future<DateTime> login(String pin) async {
+    final res = await _client.post(
+      _uri('/api/auth/login'),
+      headers: _jsonHeaders,
+      body: jsonEncode({'pin': pin}),
+    );
+    _check(res);
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final token = body['token'] as String;
+    final expiresAt = DateTime.parse(body['expiresAt'] as String);
+    setToken(token);
+    return expiresAt;
+  }
 
   // -----------------------------------------------------------------
   // Contas
@@ -79,7 +145,7 @@ class ApiClient {
     bool incluirInativas = false,
   }) async {
     final qs = incluirInativas ? '?incluirInativas=true' : '';
-    final res = await _client.get(_uri('/api/Contas$qs'));
+    final res = await _client.get(_uri('/api/Contas$qs'), headers: _authHeaders);
     _check(res);
     final list = jsonDecode(res.body) as List<dynamic>;
     return list.map((j) => Conta.fromJson(j as Map<String, dynamic>)).toList();
@@ -92,7 +158,7 @@ class ApiClient {
   }) async {
     final res = await _client.post(
       _uri('/api/Contas'),
-      headers: _jsonHeaders,
+      headers: _authHeaders,
       body: jsonEncode({
         'nome': nome,
         'tipo': tipo,
@@ -106,7 +172,7 @@ class ApiClient {
   static Future<Conta> atualizarConta(Conta c) async {
     final res = await _client.put(
       _uri('/api/Contas/${c.id}'),
-      headers: _jsonHeaders,
+      headers: _authHeaders,
       body: jsonEncode({
         'nome': c.nome,
         'tipo': c.tipo,
@@ -119,7 +185,7 @@ class ApiClient {
   }
 
   static Future<void> excluirConta(int id) async {
-    final res = await _client.delete(_uri('/api/Contas/$id'));
+    final res = await _client.delete(_uri('/api/Contas/$id'), headers: _authHeaders);
     _check(res);
   }
 
@@ -134,7 +200,7 @@ class ApiClient {
     if (tipo != null) params['tipo'] = tipo;
     if (incluirInativas) params['incluirInativas'] = 'true';
     final qs = params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
-    final res = await _client.get(_uri('/api/Categorias$qs'));
+    final res = await _client.get(_uri('/api/Categorias$qs'), headers: _authHeaders);
     _check(res);
     final list = jsonDecode(res.body) as List<dynamic>;
     return list
@@ -148,7 +214,7 @@ class ApiClient {
   }) async {
     final res = await _client.post(
       _uri('/api/Categorias'),
-      headers: _jsonHeaders,
+      headers: _authHeaders,
       body: jsonEncode({'nome': nome, 'tipo': tipo}),
     );
     _check(res);
@@ -158,7 +224,7 @@ class ApiClient {
   static Future<Categoria> atualizarCategoria(Categoria c) async {
     final res = await _client.put(
       _uri('/api/Categorias/${c.id}'),
-      headers: _jsonHeaders,
+      headers: _authHeaders,
       body: jsonEncode({'nome': c.nome, 'tipo': c.tipo, 'ativo': c.ativo}),
     );
     _check(res);
@@ -166,7 +232,7 @@ class ApiClient {
   }
 
   static Future<void> excluirCategoria(int id) async {
-    final res = await _client.delete(_uri('/api/Categorias/$id'));
+    final res = await _client.delete(_uri('/api/Categorias/$id'), headers: _authHeaders);
     _check(res);
   }
 
@@ -185,7 +251,7 @@ class ApiClient {
     if (tipo != null) params['tipo'] = tipo;
     if (contaId != null) params['contaId'] = contaId.toString();
     final qs = params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
-    final res = await _client.get(_uri('/api/Lancamentos$qs'));
+    final res = await _client.get(_uri('/api/Lancamentos$qs'), headers: _authHeaders);
     _check(res);
     final list = jsonDecode(res.body) as List<dynamic>;
     return list
@@ -196,7 +262,7 @@ class ApiClient {
   static Future<Lancamento> criarLancamento(Map<String, dynamic> dto) async {
     final res = await _client.post(
       _uri('/api/Lancamentos'),
-      headers: _jsonHeaders,
+      headers: _authHeaders,
       body: jsonEncode(dto),
     );
     _check(res);
@@ -215,7 +281,7 @@ class ApiClient {
     final semTipo = Map<String, dynamic>.from(dto)..remove('tipo');
     final res = await _client.put(
       _uri('/api/Lancamentos/$id'),
-      headers: _jsonHeaders,
+      headers: _authHeaders,
       body: jsonEncode(semTipo),
     );
     _check(res);
@@ -223,7 +289,7 @@ class ApiClient {
   }
 
   static Future<void> excluirLancamento(int id) async {
-    final res = await _client.delete(_uri('/api/Lancamentos/$id'));
+    final res = await _client.delete(_uri('/api/Lancamentos/$id'), headers: _authHeaders);
     _check(res);
   }
 
@@ -237,7 +303,7 @@ class ApiClient {
     final qs = Uri(
       queryParameters: {'inicio': _isoDate(inicio), 'fim': _isoDate(fim)},
     ).query;
-    final res = await _client.get(_uri('/api/Balanco?$qs'));
+    final res = await _client.get(_uri('/api/Balanco?$qs'), headers: _authHeaders);
     _check(res);
     return Balanco.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
@@ -247,6 +313,15 @@ class ApiClient {
   // -----------------------------------------------------------------
   static void _check(http.Response res) {
     if (res.statusCode >= 200 && res.statusCode < 300) return;
+
+    // 401 = token inválido/expirado. Limpa o token local para que a
+    // PinLockScreen volte a aparecer. O 401 do /api/auth/login (PIN
+    // errado) é tratado pelo caller — não limpamos o token nesse
+    // caso porque ele já é null.
+    if (res.statusCode == 401 && res.request?.url.path != '/api/auth/login') {
+      clearToken();
+    }
+
     String message;
     try {
       message =
