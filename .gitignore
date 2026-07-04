@@ -43,6 +43,8 @@ frontend/ios/Flutter/Generated.xcconfig
 frontend/ios/Runner/GeneratedPluginRegistrant.*
 frontend/web/.dart_tool/
 frontend/web/build/
+# Per-machine config (LAN IP, Tailscale IP, etc) — config.example.json stays tracked
+frontend/assets/config.json
 frontend/web/flutter_service_worker.js
 frontend/web/index.html
 frontend/macos/Pods/
