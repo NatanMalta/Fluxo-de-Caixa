@@ -33,6 +33,22 @@ class LancarScreenState extends State<LancarScreen> {
   int? _contaDestinoId; // Transferência
   DateTime _data = DateTime.now();
 
+  // -- Estado da lista "Lançamentos" --
+  // Data que a lista embaixo do form está exibindo. Independente de `_data`
+  // (data do lançamento que está sendo digitado). Sempre capada em hoje
+  // (◀ volta até 2000, ▶ desabilita no dia atual).
+  DateTime _dataLista = DateTime.now();
+
+  /// Hoje truncado em dia (sem hora). Usado para capar a navegação e
+  /// decidir se a data selecionada é "hoje" (label/empty state/▶).
+  DateTime get _hoje {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  bool _mesmoDia(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
   final _valorCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _formKey = GlobalKey();
@@ -64,11 +80,13 @@ class LancarScreenState extends State<LancarScreen> {
     return _LancarDados(contas, catsEntrada, catsSaida);
   }
 
-  Future<List<Lancamento>> _carregarHoje() async {
-    final hoje = DateTime.now();
+  /// Carrega os Lançamentos do dia atualmente selecionado para a lista
+  /// embaixo do form. A data é controlada por `_dataLista` (independente
+  /// de `_data`, que é a data do lançamento sendo digitado).
+  Future<List<Lancamento>> _carregarLista() async {
     return ApiClient.listarLancamentos(
-      inicio: DateTime(hoje.year, hoje.month, hoje.day),
-      fim: DateTime(hoje.year, hoje.month, hoje.day),
+      inicio: _dataLista,
+      fim: _dataLista,
     );
   }
 
@@ -206,6 +224,15 @@ class LancarScreenState extends State<LancarScreen> {
       } else {
         await ApiClient.criarLancamento(dto);
       }
+      // Em criação (não em edição), a lista passa a mostrar a data
+      // do lançamento que acabou de ser inserido. Caso o usuário
+      // esteja regularizando um dia passado, ele vê a entrada nova
+      // imediatamente, sem precisar navegar até ela com as setas.
+      if (!estavaEditando) {
+        setState(() {
+          _dataLista = DateTime(_data.year, _data.month, _data.day);
+        });
+      }
       // Bump dos notifiers de Lançamentos e Balanço — o
       // `DataInvalidator` cuida do refresh em todas as telas
       // interessadas (ver ADR 0006).
@@ -325,7 +352,7 @@ class LancarScreenState extends State<LancarScreen> {
                   const SizedBox(height: 24),
                   const Divider(),
                   const SizedBox(height: 8),
-                  _buildListaHoje(),
+                  _buildLista(),
                 ],
               ),
             );
@@ -472,24 +499,27 @@ class LancarScreenState extends State<LancarScreen> {
     );
   }
 
-  Widget _buildListaHoje() {
+  Widget _buildLista() {
+    final ehHoje = _mesmoDia(_dataLista, _hoje);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           child: Text(
-            'Lançamentos de hoje',
+            'Lançamentos',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
         ),
+        const SizedBox(height: 4),
+        _buildDateNavigator(ehHoje: ehHoje),
         const SizedBox(height: 8),
         // Re-fira quando `DataInvalidator.lancamentos` for bumpado
         // (criação/edição/exclusão de Lançamento) — ver ADR 0006.
         ListenableBuilder(
           listenable: DataInvalidator.lancamentos,
           builder: (context, _) => FutureBuilder<List<Lancamento>>(
-            future: _carregarHoje(),
+            future: _carregarLista(),
             builder: (context, snap) {
               if (snap.connectionState != ConnectionState.done) {
                 return const Padding(
@@ -505,7 +535,9 @@ class LancarScreenState extends State<LancarScreen> {
                     horizontal: 4,
                   ),
                   child: Text(
-                    'Nenhum lançamento hoje ainda.',
+                    ehHoje
+                        ? 'Nenhum lançamento hoje ainda.'
+                        : 'Nenhum lançamento em ${dateFormat.format(_dataLista)}.',
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                 );
@@ -533,6 +565,82 @@ class LancarScreenState extends State<LancarScreen> {
         ),
       ],
     );
+  }
+
+  /// Linha de navegação de data da lista: ◀ [data] ▶. A data no meio é
+  /// clicável (abre `showDatePicker` capado em hoje). ▶ desabilita no
+  /// dia atual. ◀ volta até 2000 (mesmo limite do picker do form).
+  Widget _buildDateNavigator({required bool ehHoje}) {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.chevron_left),
+          onPressed: () {
+            setState(() {
+              _dataLista = DateTime(
+                _dataLista.year,
+                _dataLista.month,
+                _dataLista.day - 1,
+              );
+            });
+          },
+          tooltip: 'Dia anterior',
+        ),
+        Expanded(
+          child: InkWell(
+            onTap: _escolherDataLista,
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: Text(
+                  ehHoje
+                      ? 'Hoje, ${dateFormat.format(_dataLista)}'
+                      : dateFormat.format(_dataLista),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.chevron_right),
+          onPressed: ehHoje
+              ? null
+              : () {
+                  setState(() {
+                    _dataLista = DateTime(
+                      _dataLista.year,
+                      _dataLista.month,
+                      _dataLista.day + 1,
+                    );
+                  });
+                },
+          tooltip: 'Dia seguinte',
+        ),
+      ],
+    );
+  }
+
+  /// Abre o date picker para a data da lista, capado em hoje. Defesa
+  /// extra: se a data vier no futuro (corrida com rollover do relógio),
+  /// clamp para hoje.
+  Future<void> _escolherDataLista() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dataLista,
+      firstDate: DateTime(2000),
+      lastDate: _hoje,
+    );
+    if (picked == null) return;
+    setState(() {
+      _dataLista = _mesmoDia(picked, _hoje)
+          ? _hoje
+          : DateTime(picked.year, picked.month, picked.day);
+    });
   }
 }
 
