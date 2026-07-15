@@ -15,7 +15,12 @@ class DashboardScreen extends StatefulWidget {
   /// edição no `LancarScreen` (ver ADR 0004).
   final ValueChanged<Lancamento>? onTapLancamento;
 
-  const DashboardScreen({super.key, this.onTapLancamento});
+  /// Disparado quando o usuário toca em uma Conta na lista de Contas.
+  /// O `HomeScreen` usa isto para abrir o `ExtratoContaScreen` da Conta
+  /// tocada (sub-tela via `Navigator.push`, ver handoff do extrato).
+  final ValueChanged<Conta>? onContaTap;
+
+  const DashboardScreen({super.key, this.onTapLancamento, this.onContaTap});
 
   @override
   State<DashboardScreen> createState() => DashboardScreenState();
@@ -65,7 +70,7 @@ class DashboardScreenState extends State<DashboardScreen> {
                   if (contas.isEmpty)
                     const _VazioView()
                   else
-                    _ContasList(contas: contas),
+                    _ContasList(contas: contas, onContaTap: widget.onContaTap),
                   const SizedBox(height: 8),
                   ListenableBuilder(
                     listenable: DataInvalidator.lancamentos,
@@ -86,13 +91,15 @@ class DashboardScreenState extends State<DashboardScreen> {
 
 class _ContaTile extends StatelessWidget {
   final Conta conta;
-  const _ContaTile({required this.conta});
+  final ValueChanged<Conta>? onTap;
+  const _ContaTile({required this.conta, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final negativo = conta.saldoAtual < 0;
     return Card(
       child: ListTile(
+        onTap: onTap == null ? null : () => onTap!(conta),
         leading: CircleAvatar(
           backgroundColor: conta.isEspecie
               ? Colors.amber.shade100
@@ -407,7 +414,8 @@ class _RecenteTile extends StatelessWidget {
 
 class _ContasList extends StatefulWidget {
   final List<Conta> contas;
-  const _ContasList({required this.contas});
+  final ValueChanged<Conta>? onContaTap;
+  const _ContasList({required this.contas, this.onContaTap});
 
   @override
   State<_ContasList> createState() => _ContasListState();
@@ -478,7 +486,7 @@ class _ContasListState extends State<_ContasList> {
                   final c = filtered[i];
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: _ContaTile(conta: c),
+                    child: _ContaTile(conta: c, onTap: widget.onContaTap),
                   );
                 },
               ),

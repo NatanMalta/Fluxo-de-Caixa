@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../models/conta.dart';
 import '../models/lancamento.dart';
 import 'dashboard_screen.dart';
+import 'extrato_conta_screen.dart';
 import 'lancar_screen.dart';
 import 'balanco_screen.dart';
 import 'config_screen.dart';
@@ -38,6 +40,22 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _indice = 1);
   }
 
+  /// Handler do `onContaTap` do Dashboard: empilha a sub-tela
+  /// `ExtratoContaScreen` para a Conta tocada. É uma sub-tela
+  /// via `Navigator.push`, não uma 5ª aba no `NavigationBar`
+  /// (ver CONTEXT.md — "Extrato da Conta" e handoff do extrato).
+  void _onContaTap(Conta c) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExtratoContaScreen(
+          conta: c,
+          onTapLancamento: _onTapLancamento,
+        ),
+      ),
+    );
+  }
+
   void _aoTrocarAba(int novo) {
     setState(() => _indice = novo);
   }
@@ -48,7 +66,10 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(
         index: _indice,
         children: [
-          DashboardScreen(onTapLancamento: _onTapLancamento),
+          DashboardScreen(
+            onTapLancamento: _onTapLancamento,
+            onContaTap: _onContaTap,
+          ),
           LancarScreen(key: _lancarKey),
           const BalancoScreen(),
           const ConfigScreen(),
