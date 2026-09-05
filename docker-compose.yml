@@ -1,0 +1,39 @@
+# docker-compose.yml — Fluxo de Caixa (ADR 0010)
+#
+# Template versionado. O scripts/deploy-docker.ps1 copia este arquivo
+# pra C:\FluxoCaixa\ na loja e roda `docker compose up -d --build` de lá.
+# O `context: .` é relativo ao próprio arquivo, então o deploy folder
+# precisa ter o código do repo também — o deploy-docker.ps1 cuida disso
+# criando um docker-compose.override.yml que aponta `build.context` pro
+# clone do repo.
+#
+# Pré-requisitos na loja (documentados no README.md):
+#   - Docker Desktop instalado e com autostart ligado
+#   - Login automático de uma conta de usuário no boot
+#   - C:\FluxoCaixa\appsettings.json (com PIN + JWT secret + connection string)
+#   - Reserva DHCP no roteador (IP do PC não pode mudar)
+#   - Regra de firewall inbound: TCP/5000
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fluxo-caixa
+    ports:
+      - "5000:5000"
+    volumes:
+      # SQLite vive num bind mount — ritual de backup não muda: copiar
+      # a pasta data\ pro pendrive (ver ADR 0002 sobre WAL mode).
+      - ./data:/data
+      # appsettings.json tem PIN em texto puro + JWT secret (ADR 0007).
+      # Montado read-only — nunca é baked na imagem Docker.
+      - ./appsettings.json:/app/appsettings.json:ro
+    # restart: always (não unless-stopped) garante que o container volta
+    # no boot independente de estado anterior. Para parar de verdade,
+    # use `docker compose down` (que remove o container e para de aplicar
+    # a policy). Se o daemon morrer, o container só volta quando o daemon
+    # voltar — no Windows host isso significa Docker Desktop + login ativo.
+    restart: always
+    # Usuário não-root (presente por default nas imagens aspnet da MS).
+    user: app

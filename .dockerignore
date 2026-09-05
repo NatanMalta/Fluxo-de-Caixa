@@ -1,0 +1,53 @@
+# .dockerignore — reduz o context enviado ao daemon e evita que
+# build artifacts, secrets e o PDV legado entrem na imagem.
+# (ADR 0010)
+
+# VCS
+.git/
+.gitignore
+
+# Legacy PDV (read-only reference — ~não relacionados ao build)
+Ponto-de-Venda/
+
+# Docs / ADRs (não precisam dentro da imagem)
+docs/
+*.md
+CONTEXT.md
+
+# .NET build artifacts
+backend/**/bin/
+backend/**/obj/
+backend/**/out/
+backend/**/publish/
+backend/**/logs/
+
+# SQLite runtime files
+backend/**/*.db
+backend/**/*.db-shm
+backend/**/*.db-wal
+
+# appsettings.json contém PIN + JWT secret (ADR 0007) — nunca na imagem.
+# É montado via bind mount no docker-compose.yml.
+backend/FluxoCaixa.Api/appsettings.json
+
+# wwwroot/ é materializado pelo stage 1 do Dockerfile
+backend/FluxoCaixa.Api/wwwroot/
+
+# Flutter build artifacts
+frontend/build/
+frontend/.dart_tool/
+frontend/.idea/
+frontend/.vscode/
+
+# config.json é per-machine (gitignored) — gerado pelo deploy-docker.ps1
+# NÃO excluir do context: o flutter build web precisa dele como asset.
+# O arquivo só existe no host após o deploy-docker.ps1 gerá-lo.
+
+# Deploy folder local (bind mount do host, não entra na imagem)
+data/
+
+# Misc
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

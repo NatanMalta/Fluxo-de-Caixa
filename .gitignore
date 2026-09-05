@@ -57,6 +57,13 @@ frontend/windows/flutter/ephemeral/
 frontend/windows/flutter/generated_plugin_registrant.cc
 frontend/windows/flutter/generated_plugin_registrant.h
 
+# --- Docker (ADR 0010) ---
+# deploy-docker.ps1 cria docker-compose.override.yml na loja (C:\FluxoCaixa),
+# não no repo — mas ignorar aqui protege contra cópias acidentais.
+docker-compose.override.yml
+# Bind mount do SQLite na loja (C:\FluxoCaixa\data) — nunca versionar o DB.
+data/
+
 # --- Misc ---
 .DS_Store
 Thumbs.db

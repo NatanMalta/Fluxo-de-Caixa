@@ -25,11 +25,22 @@ builder.Host.UseWindowsService();
 // padrão via WebApplication.CreateBuilder — em `dotnet run` o terminal
 // mostra tudo normalmente. Ver Logging/FileLoggerProvider.cs.
 //
+// Em container Linux (ADR 0010) o FileLogger não é instanciado: o
+// Console provider escreve pra stdout/stderr e `docker logs fluxo-caixa -f`
+// é o equivalente direto. Manter o FileLogger no container adicionaria
+// um bind mount sem benefício (docker logs já cobre), o arquivo cresceria
+// indefinidamente sem rotação, e quebraria o padrão Docker canônico de
+// logs em stdout.
+//
 //   PowerShell:  Get-Content logs\fluxo-caixa.log -Wait
 //   Git Bash:    tail -F logs/fluxo-caixa.log
-var logPath = Path.Combine(
-    builder.Environment.ContentRootPath, "logs", "fluxo-caixa.log");
-builder.Logging.AddProvider(new FileLoggerProvider(logPath));
+//   Docker:      docker logs fluxo-caixa -f
+if (OperatingSystem.IsWindows())
+{
+    var logPath = Path.Combine(
+        builder.Environment.ContentRootPath, "logs", "fluxo-caixa.log");
+    builder.Logging.AddProvider(new FileLoggerProvider(logPath));
+}
 
 // Services
 // Enums serializados como strings (camelCase) tanto na entrada quanto na saída.
@@ -165,6 +176,11 @@ await DatabaseInitializer.InitializeAsync(app);
 // terminal nesse caso — ver appsettings.json pra configurar log em arquivo).
 // O bind em UseUrls é 0.0.0.0, então enumeramos as interfaces IPv4 reais
 // e mostramos a URL concreta que cada dispositivo da loja deve usar.
+//
+// Em container Linux (ADR 0010) o bloco é suprimido: o container enxergaria
+// só a interface virtual do Docker (eth0, IP 172.x), inútil pro dono; o IP
+// real da LAN é o do host do Docker.
+if (OperatingSystem.IsWindows())
 {
     var urls = new List<string>();
     foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())

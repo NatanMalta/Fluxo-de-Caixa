@@ -3,8 +3,8 @@
 ## Project Overview
 
 - **Type**: Two-tier local app — Flutter (web + Android) frontend + ASP.NET 10 Web API backend, both running on the same Windows PC
-- **Persistence**: SQLite (single file). **Path must be absolute when running as a Windows Service** — relative paths resolve to `C:\Windows\System32\` (the SCM's default CWD), and the database ends up in a folder that survives reinstalls but is not where you expect. The deployed `appsettings.json` points to an absolute path (e.g., `C:/FluxoCaixa/fluxo_caixa.db`); the versioned `appsettings.Development.json` keeps a relative path for `dotnet run` so dev and prod don't share a database.
-- **Deployment**: Local server (PC) inside the store, accessed via Wi-Fi or Tailscale. No cloud, no internet. Backend runs as a Windows Service via `sc.exe`; the Flutter web build is served by the same Kestrel process. See `scripts/install-service.ps1` and `scripts/deploy-frontend.ps1`.
+- **Persistence**: SQLite (single file, WAL mode — see ADR 0002). In the Docker arrangement (ADR 0010, official), the database lives in a bind mount `C:\FluxoCaixa\data\fluxo_caixa.db` on the host, mounted as `/data/fluxo_caixa.db` inside the container. In the Windows Service fallback, the path must be absolute (relative paths resolve to `C:\Windows\System32\` — the SCM's default CWD). The versioned `appsettings.Development.json` keeps a relative path for `dotnet run` so dev and prod don't share a database.
+- **Deployment**: Local server (PC) inside the store, accessed via Wi-Fi or Tailscale. No cloud, no internet. The official path is **Docker** (ADR 0010): a single container with Kestrel serving `/api/*` and the Flutter web build (in `wwwroot/`), managed by Docker Desktop. Use `scripts/deploy-docker.ps1`. The Windows Service arrangement (`scripts/install-service.ps1` + `scripts/deploy-frontend.ps1`) is a **fallback** for when Docker Desktop won't start.
 - **Users**: Single user (the store owner). No roles. Auth via single PIN — see ADR 0007.
 
 ## Key Directories
@@ -16,6 +16,11 @@
 | `db/schema.sql` | Canonical SQLite schema (canonical source of truth) — edit here, then trigger re-init by deleting `fluxo_caixa.db` |
 | `backend/` | ASP.NET 10 Web API with EF Core 10 + SQLite |
 | `frontend/` | Flutter app (Material 3, web + Android) |
+| `Dockerfile` | Multi-stage build: Flutter web → dotnet publish → aspnet:10.0 runtime (ADR 0010) |
+| `docker-compose.yml` | Compose template: single `api` service, bind mounts for `data/` and `appsettings.json` (ADR 0010) |
+| `scripts/deploy-docker.ps1` | Docker deployment orchestrator: detects LAN IP, generates `config.json`, runs `docker compose up -d --build` (ADR 0010) |
+| `scripts/deploy-frontend.ps1` | Windows Service fallback: `flutter build web` + `dotnet publish` + `sc stop/start` |
+| `scripts/install-service.ps1` | Windows Service fallback: creates/removes the `FluxoCaixa` service via `sc.exe` |
 
 ## Domain Rules (enforce these)
 
@@ -42,7 +47,7 @@
 - **`AppDbContext`** manages `criado_em` / `atualizado_em` automatically in `SaveChanges`
 - **CORS** is open to any origin (local app, no security boundary)
 - **URL** is fixed to `http://0.0.0.0:5000` in `Program.cs` so LAN clients can connect
-- **Logging**: a custom `FileLoggerProvider` (`backend/FluxoCaixa.Api/Logging/FileLoggerProvider.cs`) writes to `publish/logs/fluxo-caixa.log`, append-only, no rotation. The standard Console provider is also active (visible when running `dotnet run`, useless under a Windows Service). To tail the service log: `Get-Content publish\logs\fluxo-caixa.log -Wait` in PowerShell, or `tail -F publish/logs/fluxo-caixa.log` in Git Bash. The startup log also enumerates the LAN URLs the service is reachable on — handy for finding the IP after install.
+- **Logging**: a custom `FileLoggerProvider` (`backend/FluxoCaixa.Api/Logging/FileLoggerProvider.cs`) writes to `publish/logs/fluxo-caixa.log`, append-only, no rotation. **Only instantiated when `OperatingSystem.IsWindows()` is true** (ADR 0010) — in a Linux container, only the Console provider is active and `docker logs fluxo-caixa -f` is the canonical tail. On a Windows host running `dotnet run` or the Windows Service, the FileLogger is active. To tail: `Get-Content publish\logs\fluxo-caixa.log -Wait` in PowerShell, `tail -F publish/logs/fluxo-caixa.log` in Git Bash, or `docker logs fluxo-caixa -f` in Docker. The startup network enumeration (LAN URLs) is also `IsWindows()`-gated — in a container it would show only the Docker bridge IP (`172.x`), not the real LAN IP.
 - **Auth** (see ADR 0007): single-PIN scheme. All controllers require `[Authorize]` (or a global `RequireAuthenticatedUser()` policy). `POST /api/auth/login` accepts the PIN and returns a 30-day JWT signed with a secret from `appsettings.json`. Brute force on `/api/auth/login` is mitigated with a fixed rate limit (5 attempts/min/IP) via `Microsoft.AspNetCore.RateLimiting`.
 
 ## Frontend Conventions
@@ -59,8 +64,8 @@
   - Web/Android on LAN: `http://<PC_IP>:5000`
   - Web/Android on Tailscale: `http://<PC_TAILSCALE_IP>:5000` (e.g., `100.x.x.x`)
 
-  The `apiBaseUrl` is **baked into the JS bundle at `flutter build web` time**. Changing the URL means rebuilding the Flutter app and re-running `scripts/deploy-frontend.ps1`. There is no runtime override in v1.
-- **Frontend hosting**: in production, the Flutter web build is served by the **same Kestrel** process as the API. The build output lands in `backend/FluxoCaixa.Api/wwwroot/` (via `scripts/deploy-frontend.ps1`), and Kestrel serves both `/api/*` (the API) and everything else (the SPA, with a deep-link fallback to `index.html`). Two non-obvious behaviors are documented in ADRs:
+  The `apiBaseUrl` is **baked into the JS bundle at `flutter build web` time**. In the Docker deployment (ADR 0010), `scripts/deploy-docker.ps1` generates `config.json` from `config.example.json` with the detected LAN IP before the Docker build. In the Windows Service fallback, `scripts/deploy-frontend.ps1` runs `flutter build web` on the host (where the developer is responsible for having `config.json` in place). There is no runtime override in v1.
+- **Frontend hosting**: in production, the Flutter web build is served by the **same Kestrel** process as the API. In Docker (ADR 0010), the `Dockerfile` multi-stage build copies the Flutter output into `wwwroot/` inside the image. In the Windows Service fallback, `scripts/deploy-frontend.ps1` copies it to `backend/FluxoCaixa.Api/wwwroot/` on the host. Kestrel serves both `/api/*` (the API) and everything else (the SPA, with a deep-link fallback to `index.html`). Two non-obvious behaviors are documented in ADRs:
   - **ADR 0008**: the SPA fallback must carry `.AllowAnonymous()`. Without it, the global `RequireAuthenticatedUser()` policy returns 401 on every deep link (`/lancar`, `/balanco`, `/config`), and the user never sees the PIN screen.
   - **ADR 0009**: the Flutter web bundling places pubspec assets at `<webroot>/assets/assets/<file>` (note the duplicated `assets/`), but the `AssetManifest.bin` tells the runtime to fetch from `/assets/<file>`. The server compensates with a second `UseStaticFiles` registration that maps `/assets/*` to `<webroot>/assets/assets/`. Without this alias, `ApiClient.init()` silently falls back to the default `http://localhost:5000` and the login fails with "could not connect to server".
 - **No tests** in v1. Add `test/` files as the project grows.
@@ -104,18 +109,51 @@ flutter run -d chrome
 flutter run -d android
 ```
 
-### Deployment to the store PC
+### Deployment to the store PC (Docker — ADR 0010)
 
-The Windows Service `FluxoCaixa` (created by `scripts/install-service.ps1`, run as Administrator) is the only thing that needs to be running on the store PC. The Flutter web is bundled into the same `publish/` directory as the API and served by the same Kestrel. Updating the deployment is a single PowerShell command:
+The official deployment is via Docker Desktop on the store PC. A single container (`fluxo-caixa`) runs Kestrel, which serves both `/api/*` and the Flutter web build. The container is non-root, uses a bind mount for SQLite (`./data:/data`), and mounts `appsettings.json` read-only (secrets never enter the image). `restart: always` ensures the container comes back on reboot — but only if the Docker daemon is running, which on Windows means Docker Desktop must have autostart enabled and a user session must be active (login automático).
+
+Updating the deployment:
+
+```powershell
+# From the repo root.
+.\scripts\deploy-docker.ps1
+```
+
+This detects the LAN IP, generates `frontend/assets/config.json`, copies `Dockerfile` + `docker-compose.yml` to `C:\FluxoCaixa\`, creates a `docker-compose.override.yml` pointing the build context to the repo, and runs `docker compose up -d --build`.
+
+Deploy folder layout (`C:\FluxoCaixa\`, isolated from the repo):
+
+```
+C:\FluxoCaixa\
+├── docker-compose.yml          (copied from repo)
+├── docker-compose.override.yml (generated — points build context to repo)
+├── appsettings.json            (gitignored, PIN + JWT secret + connection string)
+└── data\
+    ├── fluxo_caixa.db
+    ├── fluxo_caixa.db-wal
+    └── fluxo_caixa.db-shm
+```
+
+`appsettings.json` is gitignored (it contains the JWT secret and the PIN — see ADR 0007). The `ConnectionStrings:DefaultConnection` must point to `Data Source=/data/fluxo_caixa.db` (the path inside the container). On a fresh checkout, copy from a backup or from the store PC's deployed config before running `dotnet run` in dev.
+
+Network: `ports: "5000:5000"` maps the host's `0.0.0.0:5000` to the container. A firewall inbound rule for `TCP/5000` on the Windows host may be needed. A DHCP reservation on the router ensures the store PC's IP doesn't change (the `apiBaseUrl` is baked into the Flutter JS bundle at build time).
+
+Logs: `docker logs fluxo-caixa -f` (the `FileLoggerProvider` is not active in Linux containers — only Console, which Docker captures as stdout).
+
+Backup: copy the `C:\FluxoCaixa\data\` folder (not just the `.db` file — WAL mode means recent Lançamentos may be in `fluxo_caixa.db-wal`). See ADR 0002.
+
+### Windows Service (fallback)
+
+If Docker Desktop won't start on the store PC (WSL2/vpnkit bugs after Windows updates), the Windows Service arrangement remains as a fallback:
 
 ```powershell
 # From the repo root, in an Administrator PowerShell.
-.\scripts\deploy-frontend.ps1
+.\scripts\deploy-frontend.ps1   # flutter build web → wwwroot/ → dotnet publish → sc stop/start
+.\scripts\install-service.ps1   # creates the service (first time only)
 ```
 
-This does `flutter build web` → copy to `backend/FluxoCaixa.Api/wwwroot/` → `dotnet publish` → `sc stop` → `sc start`. ~30-60s total, with ~3-5s of downtime on the LAN. The service auto-restarts on crash (configured in `install-service.ps1`).
-
-`appsettings.json` is gitignored (it contains the JWT secret and the PIN — see ADR 0007). The versioned template does not have a working config; on a fresh checkout, copy from a backup or from the store PC's deployed config before running `dotnet run` in dev.
+The scripts are not actively maintained (they don't mirror Docker build changes), but the path works while `builder.Host.UseWindowsService()` is in `Program.cs`.
 
 ## Adding a new field to Lançamento
 

@@ -22,6 +22,7 @@ Aplicativo web/mobile em Flutter + backend ASP.NET (C#) para registro manual do 
 - **.NET SDK 10.0+** (inclui EF Core CLI)
 - **Flutter 3.x stable** com suporte a web e Android
 - **Android SDK** (para build/run no Android)
+- **Docker Desktop** (para deployment na loja — ver seção Deploy abaixo)
 - **Visual Studio Code** ou outra IDE (recomendado)
 
 ## Como rodar
@@ -93,9 +94,80 @@ Para emulador Android, use `http://10.0.2.2:5000` (IP especial que aponta pro ho
 | DELETE| `/api/Lancamentos/{id}`               | Exclui lançamento                              |
 | GET   | `/api/Balanco?inicio&fim`             | Resumo do período (Entradas, Saídas, Resultado, saldos e breakdown) |
 
+## Deploy (Docker)
+
+O deployment oficial é via Docker (ADR 0010). O backend (Kestrel servindo API + Flutter web num único processo) roda num container Linux gerido por Docker Desktop no PC da loja.
+
+### Pré-requisitos na loja
+
+- **Docker Desktop** instalado e com autostart ligado ("Start Docker Desktop when you sign in")
+- **Login automático** de uma conta de usuário no boot (o daemon do Docker Desktop depende de sessão ativa no Windows)
+- **Reserva DHCP** no roteador garantindo que o IP do PC da loja não mude (o `apiBaseUrl` do Flutter é baked no JS em build time — se o IP mudar, é preciso re-rodar o deploy)
+- **Regra de firewall inbound** permitindo `TCP/5000` no Windows host
+
+### Deploy
+
+A partir do clone do repo, num PowerShell:
+
+```powershell
+.\scripts\deploy-docker.ps1
+```
+
+O script:
+1. Detecta o IP atual da LAN
+2. Gera `frontend/assets/config.json` com `apiBaseUrl = http://<IP>:5000`
+3. Garante que `C:\FluxoCaixa\` existe com `appsettings.json` (PIN + JWT secret + connection string apontando pra `/data/fluxo_caixa.db`)
+4. Copia `Dockerfile` + `docker-compose.yml` do repo pra `C:\FluxoCaixa\`
+5. Cria `docker-compose.override.yml` redirecionando o build context pro repo
+6. Roda `docker compose up -d --build`
+
+### Estrutura de `C:\FluxoCaixa\`
+
+```
+C:\FluxoCaixa\
+├── docker-compose.yml          (copiado do repo)
+├── docker-compose.override.yml (gerado pelo script — aponta pro repo)
+├── appsettings.json            (gitignored, com PIN + JWT secret)
+└── data\
+    ├── fluxo_caixa.db
+    ├── fluxo_caixa.db-wal
+    └── fluxo_caixa.db-shm
+```
+
+### Logs
+
+```bash
+docker logs fluxo-caixa -f
+```
+
+### Parar / reiniciar
+
+```bash
+# Parar (remove o container — não volta no próximo reboot)
+docker compose down
+
+# Reiniciar após parar
+.\scripts\deploy-docker.ps1
+```
+
+## Deploy (Windows Service — fallback)
+
+Se o Docker Desktop não subir no host da loja (bugs de WSL2/vpnkit em updates do Windows), o arranjo Windows Service permanece como fallback de emergência:
+
+```powershell
+.\scripts\deploy-frontend.ps1    # builda Flutter + .NET
+.\scripts\install-service.ps1    # cria e inicia o serviço (como Administrador)
+```
+
+Os scripts não são mantidos ativamente (não espelham mudanças de build), mas o caminho Windows Service funciona enquanto `builder.Host.UseWindowsService()` estiver no `Program.cs`.
+
 ## Backup
 
-O banco é um único arquivo SQLite (`fluxo_caixa.db` na pasta do backend). Para fazer backup, basta copiar esse arquivo para um lugar seguro (HD externo, pen drive, etc.). Recomenda-se copiar pelo menos uma vez por semana.
+O banco é SQLite em modo WAL — além de `fluxo_caixa.db`, existem `fluxo_caixa.db-wal` e `fluxo_caixa.db-shm` ao lado dele. Copiar só o `.db` produz um backup inconsistente (Lançamentos recentes ainda no WAL ficam de fora).
+
+**No arranjo Docker:** copiar a pasta `C:\FluxoCaixa\data\` inteira para um lugar seguro (HD externo, pen drive). Recomenda-se pelo menos uma vez por semana.
+
+**No arranjo Windows Service:** copiar a pasta onde o banco vive (o caminho absoluto do `appsettings.json`).
 
 ## Próximos passos (v2)
 
